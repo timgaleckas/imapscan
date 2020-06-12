@@ -1,4 +1,4 @@
-FROM debian:latest
+FROM ubuntu:latest
 
 # timezone name that can be overridden when building the container
 ARG CTNR_TZ=UTC
@@ -14,6 +14,7 @@ RUN apt-get update && \
     apt-get install -y \
       cron \
       imapfilter \
+      lua5.3 \
       nano \
       python \
       python-pip \
@@ -21,6 +22,7 @@ RUN apt-get update && \
       pyzor \
       razor \
       rsyslog \
+      run-one \
       spamassassin \
       spamc \
       unzip \
@@ -43,23 +45,22 @@ RUN wget https://github.com/dc55028/isbg/archive/master.zip && \
     rm -Rf isbg-master && \
     rm isbg.zip
 
-ADD files/* /root/
+COPY files/root /root
+COPY files/cron_scans /etc/cron.d/cron_scans
+RUN crontab /etc/cron.d/cron_scans
+COPY files/rsyslog.conf /etc/rsyslog.conf
+RUN mkdir /root/.spamassassin && ln -s /var/spamassassin/user_prefs /root/.spamassassin/user_prefs
 
 # prepare directories and files
-RUN mkdir /root/accounts ; \
-    mkdir /root/.imapfilter ; \
+RUN mkdir /root/imap_config ; \
     mkdir -p /var/spamassassin/bayesdb ; \
     chown -R debian-spamd:mail /var/spamassassin ; \
     chmod u+x startup ; \
-    chmod u+x *.sh ; \
-    crontab cron_scans && rm cron_scans ; \
     sed -i 's/ENABLED=0/ENABLED=1/' /etc/default/spamassassin ; \
     sed -i 's/CRON=0/CRON=1/' /etc/default/spamassassin ; \
     sed -i 's/^OPTIONS=".*"/OPTIONS="--allow-tell --max-children 5 --helper-home-dir -u debian-spamd -x --virtual-config-dir=\/var\/spamassassin -s mail"/' /etc/default/spamassassin ; \
     echo "bayes_path /var/spamassassin/bayesdb/bayes" >> /etc/spamassassin/local.cf ; \
     echo "allow_user_rules 1" >> /etc/spamassassin/local.cf ; \
-    mv 9*.cf /etc/spamassassin/ ; \
-    echo "alias logger='/usr/bin/logger -e'" >> /etc/bash.bashrc ; \
     echo "LANG=en_US.UTF-8" > /etc/default/locale ; \
     if [ -e "/usr/share/zoneinfo/${CTNR_TZ}" ]; then \
       unlink /etc/localtime ; \
@@ -71,7 +72,6 @@ RUN mkdir /root/accounts ; \
 
 # volumes
 VOLUME /var/spamassassin
-VOLUME /root/.imapfilter
-VOLUME /root/accounts
+VOLUME /root/imap_config
 
-CMD /root/startup && tail -n 0 -F /var/log/*.log
+CMD /root/startup
